@@ -1,221 +1,250 @@
 import argparse
-import os
 from pathlib import Path
 from datetime import datetime
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import piexif
 
 
 SUPPORTED_EXTS = {".jpg", ".jpeg", ".png"}
 
 
-def get_exif_datetime(img_path: Path) -> datetime | None:
-    """
-    Tries DateTimeOriginal first, then DateTime.
-    Returns a datetime or None if not found.
-    """
+def getExifDatetime(imagePath: Path):
     try:
-        exif_dict = piexif.load(str(img_path))
+        exifDict = piexif.load(str(imagePath))
     except Exception:
         return None
 
-    exif = exif_dict.get("Exif", {})
-    zeroth = exif_dict.get("0th", {})
+    exif = exifDict.get("Exif", {})
+    zeroth = exifDict.get("0th", {})
 
-    dt_bytes = exif.get(piexif.ExifIFD.DateTimeOriginal) or zeroth.get(piexif.ImageIFD.DateTime)
-    if not dt_bytes:
+    dateBytes = (
+        exif.get(piexif.ExifIFD.DateTimeOriginal)
+        or zeroth.get(piexif.ImageIFD.DateTime)
+    )
+
+    if not dateBytes:
         return None
 
     try:
-        dt_str = dt_bytes.decode("utf-8", errors="ignore").strip()
-        # EXIF format is usually "YYYY:MM:DD HH:MM:SS"
-        return datetime.strptime(dt_str, "%Y:%m:%d %H:%M:%S")
+        dateString = dateBytes.decode("utf-8", errors="ignore").strip()
+        return datetime.strptime(dateString, "%Y:%m:%d %H:%M:%S")
     except Exception:
         return None
 
 
-def pick_font(font_path: str | None, font_size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """
-    Uses a provided .ttf/.otf if given, else tries common fonts, else PIL default.
-    """
-    if font_path:
+def pickFont(fontPath, fontSize):
+    if fontPath:
         try:
-            return ImageFont.truetype(font_path, font_size)
+            return ImageFont.truetype(fontPath, fontSize)
         except Exception:
             pass
 
-    # Try a few common fonts (Windows/macOS/Linux); if none exist, fallback.
-    candidates = [
+    fallbackFonts = [
         "arial.ttf",
         "Arial.ttf",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     ]
-    for c in candidates:
+
+    for font in fallbackFonts:
         try:
-            return ImageFont.truetype(c, font_size)
+            return ImageFont.truetype(font, fontSize)
         except Exception:
             continue
 
     return ImageFont.load_default()
 
 
-def compute_position(img_w: int, img_h: int, text_w: int, text_h: int, corner: str, pad: int):
+def computePosition(imgWidth, imgHeight, textWidth, textHeight, corner, padX, padY):
     corner = corner.lower()
+
     if corner == "br":
-        return (img_w - text_w - pad, img_h - text_h - pad)
+        return (imgWidth - textWidth - padX, imgHeight - textHeight - padY)
     if corner == "bl":
-        return (pad, img_h - text_h - pad)
+        return (padX, imgHeight - textHeight - padY)
     if corner == "tr":
-        return (img_w - text_w - pad, pad)
+        return (imgWidth - textWidth - padX, padY)
     if corner == "tl":
-        return (pad, pad)
-    raise ValueError("corner must be one of: br, bl, tr, tl")
+        return (padX, padY)
+
+    raise ValueError("Invalid corner option")
 
 
-def stamp_image(
-    in_path: Path,
-    out_path: Path,
-    text: str,
-    corner: str,
-    font: ImageFont.ImageFont,
-    fill: tuple[int, int, int],
-    stroke_fill: tuple[int, int, int] | None,
-    stroke_width: int,
-    pad: int,
-    box: bool,
-    box_fill: tuple[int, int, int, int],
-    box_pad: int,
+def stampImage(
+    inputPath,
+    outputPath,
+    text,
+    corner,
+    font,
+    fillColor,
+    strokeColor,
+    strokeWidth,
+    padX,
+    padY,
+    drawBox,
+    boxFill,
+    boxPadding,
+    drawShadow,
+    shadowOffset,
+    shadowFill,
 ):
-    with Image.open(in_path) as im:
-        # Work in RGBA for box transparency, then convert back as needed
-        im_rgba = im.convert("RGBA")
-        draw = ImageDraw.Draw(im_rgba)
+    with Image.open(inputPath) as image:
+        image = ImageOps.exif_transpose(image)
+        imageRGBA = image.convert("RGBA")
+        draw = ImageDraw.Draw(imageRGBA)
 
-        # Measure text
-        # Use textbbox for accurate sizing
-        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
+        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=strokeWidth)
+        textWidth = bbox[2] - bbox[0]
+        textHeight = bbox[3] - bbox[1]
 
-        x, y = compute_position(im_rgba.width, im_rgba.height, text_w, text_h, corner, pad)
+        x, y = computePosition(
+            imageRGBA.width,
+            imageRGBA.height,
+            textWidth,
+            textHeight,
+            corner,
+            padX,
+            padY,
+        )
 
-        if box:
+        if drawBox:
             rect = (
-                x - box_pad,
-                y - box_pad,
-                x + text_w + box_pad,
-                y + text_h + box_pad,
+                x - boxPadding,
+                y - boxPadding,
+                x + textWidth + boxPadding,
+                y + textHeight + boxPadding,
             )
-            draw.rectangle(rect, fill=box_fill)
+            draw.rectangle(rect, fill=boxFill)
+
+        if drawShadow:
+            dx, dy = shadowOffset
+            draw.text(
+                (x + dx, y + dy),
+                text,
+                font=font,
+                fill=shadowFill,
+            )
 
         draw.text(
             (x, y),
             text,
             font=font,
-            fill=fill,
-            stroke_fill=stroke_fill if stroke_width > 0 else None,
-            stroke_width=stroke_width if stroke_width > 0 else 0,
+            fill=fillColor,
+            stroke_fill=strokeColor if strokeWidth > 0 else None,
+            stroke_width=strokeWidth if strokeWidth > 0 else 0,
         )
 
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Save back as RGB for jpg
-        if out_path.suffix.lower() in [".jpg", ".jpeg"]:
-            im_rgba.convert("RGB").save(out_path, quality=95)
+        outputPath.parent.mkdir(parents=True, exist_ok=True)
+        if outputPath.suffix.lower() in [".jpg", ".jpeg"]:
+            imageRGBA.convert("RGB").save(outputPath, quality=95)
         else:
-            im_rgba.save(out_path)
+            imageRGBA.save(outputPath)
 
 
-def parse_color(s: str, rgba: bool = False):
-    """
-    Accepts '255,255,255' or '255,255,255,160'
-    """
-    parts = [p.strip() for p in s.split(",")]
-    nums = [int(p) for p in parts]
+def parseColor(colorString, rgba=False):
+    values = [int(v.strip()) for v in colorString.split(",")]
+
     if rgba:
-        if len(nums) == 3:
-            nums.append(180)
-        if len(nums) != 4:
-            raise ValueError("RGBA color must be R,G,B or R,G,B,A")
-        return tuple(nums)  # type: ignore
-    else:
-        if len(nums) != 3:
-            raise ValueError("RGB color must be R,G,B")
-        return tuple(nums)  # type: ignore
+        if len(values) == 3:
+            values.append(180)
+        return tuple(values)
+
+    return tuple(values)
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Re-stamp photos with EXIF date (Nikon Coolpix S9600 friendly).")
-    ap.add_argument("--input", "-i", required=True, help="Input folder of images")
-    ap.add_argument("--output", "-o", required=True, help="Output folder")
-    ap.add_argument("--format", default="%Y-%m-%d %H:%M", help="Datetime format (strftime)")
-    ap.add_argument("--corner", default="br", choices=["br", "bl", "tr", "tl"], help="Stamp corner")
-    ap.add_argument("--size", type=int, default=44, help="Font size (pixels-ish)")
-    ap.add_argument("--pad", type=int, default=24, help="Padding from edge")
-    ap.add_argument("--fill", default="255,255,255", help="Text color R,G,B")
-    ap.add_argument("--stroke", default="0,0,0", help="Stroke color R,G,B (outline)")
-    ap.add_argument("--stroke_width", type=int, default=2, help="Outline thickness (0 to disable)")
-    ap.add_argument("--font", default=None, help="Optional .ttf/.otf path")
-    ap.add_argument("--box", action="store_true", help="Draw semi-transparent box behind text")
-    ap.add_argument("--box_fill", default="0,0,0,140", help="Box color R,G,B,A")
-    ap.add_argument("--box_pad", type=int, default=10, help="Box padding around text")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser("Nikon-style EXIF date restamper")
 
-    in_dir = Path(args.input)
-    out_dir = Path(args.output)
+    parser.add_argument("-i", "--input", required=True)
+    parser.add_argument("-o", "--output", required=True)
 
-    if not in_dir.exists() or not in_dir.is_dir():
-        raise SystemExit(f"Input folder not found: {in_dir}")
+    parser.add_argument("--format", default="%m.%d.%Y    %H:%M")
+    parser.add_argument("--corner", default="br", choices=["br", "bl", "tr", "tl"])
+    parser.add_argument("--size", type=int, default=44)
 
-    fill = parse_color(args.fill, rgba=False)
-    stroke = parse_color(args.stroke, rgba=False) if args.stroke_width > 0 else None
-    box_fill = parse_color(args.box_fill, rgba=True)
+    parser.add_argument("--pad", type=int, default=24)
+    parser.add_argument("--padX", type=int, default=None)
+    parser.add_argument("--padY", type=int, default=None)
 
-    font = pick_font(args.font, args.size)
+    parser.add_argument("--fill", default="255,165,0")
+    parser.add_argument("--stroke", default="0,0,0")
+    parser.add_argument("--strokeWidth", type=int, default=0)
+    parser.add_argument("--font", default=None)
 
-    files = [p for p in in_dir.rglob("*") if p.suffix.lower() in SUPPORTED_EXTS]
-    if not files:
-        raise SystemExit("No images found in input folder.")
+    parser.add_argument("--box", action="store_true")
+    parser.add_argument("--boxFill", default="0,0,0,140")
+    parser.add_argument("--boxPad", type=int, default=10)
 
-    processed = 0
-    skipped = 0
+    parser.add_argument("--shadow", action="store_true")
+    parser.add_argument("--shadowOffset", default="5,5")
+    parser.add_argument("--shadowFill", default="0,0,0,230")
 
-    for p in files:
-        dt = get_exif_datetime(p)
-        if not dt:
-            skipped += 1
+    parser.add_argument("--preset", choices=["none", "nikon"], default="none")
+
+    args = parser.parse_args()
+
+    # VERY TEDIOUS PLACING FOR THE DATESTAMP AHHH
+
+    if args.preset == "nikon":
+        args.size = 160
+        args.padX = 340
+        args.padY = 360
+        args.shadow = True
+        args.strokeWidth = 0
+        args.box = False
+
+    padX = args.padX if args.padX is not None else args.pad
+    padY = args.padY if args.padY is not None else args.pad
+
+    fillColor = parseColor(args.fill)
+    strokeColor = parseColor(args.stroke) if args.strokeWidth > 0 else None
+    boxFill = parseColor(args.boxFill, rgba=True)
+    shadowFill = parseColor(args.shadowFill, rgba=True)
+    shadowOffset = tuple(int(v) for v in args.shadowOffset.split(","))
+
+    font = pickFont(args.font, args.size)
+
+    inputDir = Path(args.input)
+    outputDir = Path(args.output)
+
+    imageFiles = [
+        p for p in inputDir.rglob("*") if p.suffix.lower() in SUPPORTED_EXTS
+    ]
+
+    for imagePath in imageFiles:
+        timestamp = getExifDatetime(imagePath)
+        if not timestamp:
             continue
 
-        text = dt.strftime(args.format)
+        text = timestamp.strftime(args.format)
 
-        rel = p.relative_to(in_dir)
-        out_path = out_dir / rel
-        out_path = out_path.with_name(out_path.stem + "_stamped" + out_path.suffix)
+        outputPath = outputDir / imagePath.relative_to(inputDir)
+        outputPath = outputPath.with_name(
+            outputPath.stem + "_stamped" + outputPath.suffix
+        )
 
-        try:
-            stamp_image(
-                in_path=p,
-                out_path=out_path,
-                text=text,
-                corner=args.corner,
-                font=font,
-                fill=fill,
-                stroke_fill=stroke,
-                stroke_width=args.stroke_width,
-                pad=args.pad,
-                box=args.box,
-                box_fill=box_fill,
-                box_pad=args.box_pad,
-            )
-            processed += 1
-        except Exception:
-            skipped += 1
+        stampImage(
+            imagePath,
+            outputPath,
+            text,
+            args.corner,
+            font,
+            fillColor,
+            strokeColor,
+            args.strokeWidth,
+            padX,
+            padY,
+            args.box,
+            boxFill,
+            args.boxPad,
+            args.shadow,
+            shadowOffset,
+            shadowFill,
+        )
 
-    print(f"Done. Processed: {processed}, Skipped (no EXIF / errors): {skipped}")
-    print(f"Output: {out_dir}")
+    print("Done.")
 
 
 if __name__ == "__main__":
