@@ -12,6 +12,3 @@ run:
 clean:
 	rm -rf $(OUTPUT)
 
-help:
-	@echo "make run    → stamp photos"
-	@echo "make clean  → remove output folder"
