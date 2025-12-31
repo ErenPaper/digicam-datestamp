@@ -160,7 +160,7 @@ def main():
     parser.add_argument("-i", "--input", required=True)
     parser.add_argument("-o", "--output", required=True)
 
-    parser.add_argument("--format", default="%m.%d.%Y    %H:%M")
+    parser.add_argument("--format", default="%m.%d.%Y   %H:%M")
     parser.add_argument("--corner", default="br", choices=["br", "bl", "tr", "tl"])
     parser.add_argument("--size", type=int, default=44)
 
@@ -181,12 +181,13 @@ def main():
     parser.add_argument("--shadowOffset", default="5,5")
     parser.add_argument("--shadowFill", default="0,0,0,230")
 
+    # Add your own presets alongside "nikon"
     parser.add_argument("--preset", choices=["none", "nikon"], default="none")
 
     args = parser.parse_args()
 
     # VERY TEDIOUS PLACING FOR THE DATESTAMP AHHH
-
+    # Can add your own version :)
     if args.preset == "nikon":
         args.size = 160
         args.padX = 340
