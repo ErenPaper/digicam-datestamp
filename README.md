@@ -25,10 +25,10 @@ I knew that older digital cameras store capture time in EXIF metadata, but not a
 
 #### Using the program
 To delete the content in the 'output' folder:
-'py -c "import pathlib, shutil; p=pathlib.Path('output'); [shutil.rmtree(x, ignore_errors=True) if x.is_dir() else x.unlink(missing_ok=True) for x in p.iterdir()] if p.exists() else None"'
+py -c "import pathlib, shutil; p=pathlib.Path('output'); [shutil.rmtree(x, ignore_errors=True) if x.is_dir() else x.unlink(missing_ok=True) for x in p.iterdir()] if p.exists() else None"
 
 To run the program, use the 'Makefile' or use this:
-'py restamp.py -i input -o output --preset nikon --font ".\fonts\VCR_OSD_MONO_1.001.ttf"' 
+py restamp.py -i input -o output --preset nikon --font ".\fonts\VCR_OSD_MONO_1.001.ttf"
 
 ##### Makefile (optional)
 For users on Linux, macOS, or Windows (via WSL), a Makefile is included...not tested yet though I'm on windows HEHE
