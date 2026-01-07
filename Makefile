@@ -9,6 +9,9 @@ OUTPUT := output
 run:
 	$(PYTHON) $(SCRIPT) $(INPUT) $(OUTPUT)
 
-clean:
-	rm -rf $(OUTPUT)
+iclean:
+	rm -rf $(INPUT)/*
+
+oclean:
+	rm -rf $(OUTPUT)/*
 

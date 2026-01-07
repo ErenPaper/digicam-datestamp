@@ -24,6 +24,9 @@ I knew that older digital cameras store capture time in EXIF metadata, but not a
 - Minimal interface: input folder → output folder
 
 #### Using the program
+Ensure you have downloaded requirements.txt by running:
+pip install -r requirements.txt
+
 To delete the content in the 'output' folder:
 py -c "import pathlib, shutil; p=pathlib.Path('output'); [shutil.rmtree(x, ignore_errors=True) if x.is_dir() else x.unlink(missing_ok=True) for x in p.iterdir()] if p.exists() else None"
 
@@ -32,3 +35,8 @@ py restamp.py -i input -o output --preset nikon --font ".\fonts\VCR_OSD_MONO_1.0
 
 ##### Makefile (optional)
 For users on Linux, macOS, or Windows (via WSL), a Makefile is included...not tested yet though I'm on windows HEHE
+
+## Notes
+If py restamp.py -i input -o output --preset nikon --font ".\fonts\VCR_OSD_MONO_1.001.ttf" does not work, try "python3", and also
+make sure you have updated your pip by running:
+pip install --upgrade pip
